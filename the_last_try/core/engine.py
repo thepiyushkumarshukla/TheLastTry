@@ -1,0 +1,248 @@
+"""Scanning engine for The Last Try."""
+
+from __future__ import annotations
+
+import signal
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+import requests
+from requests.adapters import HTTPAdapter
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
+from rich.table import Table
+from urllib3.util.retry import Retry
+
+from .browser import BrowserConfirmer
+from .utils import human_delay, payload_reflected, save_results
+from .waf import WAFDetector
+
+console = Console()
+
+
+class Engine:
+    """Main scanner engine implementing request, reflection, and browser verification."""
+
+    def __init__(
+        self,
+        target_url: str,
+        payloads: list[str],
+        user_agents: list[str],
+        threads: int = 5,
+        delay: float = 1.0,
+        random_delay: float = 2.0,
+        timeout: int = 10,
+        waf_bypass: bool = True,
+        headless: bool = True,
+        output_file: str | None = None,
+        verbose: bool = False,
+    ) -> None:
+        self.target_url = target_url
+        self.payloads = payloads
+        self.user_agents = user_agents
+        self.threads = threads
+        self.delay = delay
+        self.random_delay = random_delay
+        self.timeout = timeout
+        self.waf_bypass = waf_bypass
+        self.headless = headless
+        self.output_file = output_file
+        self.verbose = verbose
+
+        self.results: list[dict] = []
+        self.response_log: list[dict] = []
+        self.blocked_payloads: set[str] = set()
+
+        self._lock = threading.Lock()
+        self._browser_lock = threading.Semaphore(2)
+        self._thread_local = threading.local()
+        self._stop_event = threading.Event()
+
+    def _session(self) -> requests.Session:
+        if not hasattr(self._thread_local, "session"):
+            retry = Retry(
+                total=2,
+                connect=2,
+                read=2,
+                backoff_factor=0.3,
+                status_forcelist=[429, 500, 502, 503, 504],
+                allowed_methods=["GET"],
+                raise_on_status=False,
+            )
+            adapter = HTTPAdapter(max_retries=retry)
+            session = requests.Session()
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            self._thread_local.session = session
+        return self._thread_local.session
+
+    def _make_request(self, url: str, user_agent: str) -> Optional[requests.Response]:
+        headers = {"User-Agent": user_agent}
+        try:
+            return self._session().get(
+                url,
+                headers=headers,
+                timeout=self.timeout,
+                allow_redirects=True,
+            )
+        except requests.RequestException as exc:
+            if self.verbose:
+                console.print(f"[red][ERROR][/red] Request failed for {url}: {exc}")
+            return None
+
+    def test_payload(self, payload: str, bypass_mode: bool = False) -> Optional[Dict[str, Any]]:
+        if self._stop_event.is_set():
+            return None
+
+        import random
+
+        target = self.target_url.replace("HERE", payload)
+        user_agent = random.choice(self.user_agents)
+
+        human_delay(self.delay, self.random_delay)
+        response = self._make_request(target, user_agent)
+
+        if response is None:
+            return None
+
+        response_entry = {
+            "payload": payload,
+            "url": target,
+            "status_code": response.status_code,
+            "headers": dict(response.headers),
+            "body": response.text,
+            "bypass_mode": bypass_mode,
+        }
+        with self._lock:
+            self.response_log.append(response_entry)
+
+        if response.status_code in {403, 406, 429, 503}:
+            with self._lock:
+                self.blocked_payloads.add(payload)
+            if self.verbose:
+                console.print(
+                    f"[red]BLOCKED[/red] {response.status_code} | {payload[:80]}"
+                )
+            return None
+
+        if not payload_reflected(payload, response.text):
+            if self.verbose:
+                console.print(f"[dim]Not reflected[/dim] {payload[:80]}")
+            return None
+
+        with self._browser_lock:
+            confirmer = BrowserConfirmer(headless=self.headless, timeout=self.timeout)
+            dialog = confirmer.confirm_xss(target)
+
+        if dialog and dialog.get("confirmed"):
+            result = {
+                "url": target,
+                "payload": payload,
+                "dialog_type": dialog.get("dialog_type", ""),
+                "dialog_text": dialog.get("dialog_text", ""),
+                "timestamp": datetime.now(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "confirmed": True,
+            }
+            with self._lock:
+                self.results.append(result)
+            console.print(
+                f"[bold green]CONFIRMED[/bold green] {payload[:80]} -> "
+                f"{result['dialog_type']}({result['dialog_text']})"
+            )
+            return result
+
+        if self.verbose:
+            console.print(f"[yellow]Reflected, no dialog[/yellow] {payload[:80]}")
+        return {"confirmed": False, "payload": payload, "url": target}
+
+    def _render_summary(self) -> None:
+        table = Table(title="The Last Try - Confirmed XSS Results")
+        table.add_column("Payload", style="cyan", overflow="fold")
+        table.add_column("URL", style="magenta", overflow="fold")
+        table.add_column("Dialog", style="green")
+
+        if not self.results:
+            console.print("[yellow]No confirmed XSS dialogs found.[/yellow]")
+            return
+
+        for item in self.results:
+            table.add_row(
+                item["payload"],
+                item["url"],
+                f"{item['dialog_type']}: {item['dialog_text']}",
+            )
+
+        console.print(table)
+
+    def _signal_handler(self, signum, frame) -> None:  # noqa: ARG002
+        console.print("\n[yellow]Interrupt received. Finishing in-flight payloads...[/yellow]")
+        self._stop_event.set()
+
+    def run(self) -> list[dict]:
+        original_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, self._signal_handler)
+
+        try:
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("{task.completed}/{task.total}"),
+                TimeElapsedColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Testing payloads", total=len(self.payloads))
+                with ThreadPoolExecutor(max_workers=self.threads) as executor:
+                    future_map = {
+                        executor.submit(self.test_payload, payload): payload
+                        for payload in self.payloads
+                    }
+
+                    for future in as_completed(future_map):
+                        _ = future.result()
+                        progress.advance(task)
+                        if self._stop_event.is_set():
+                            break
+
+            if self.waf_bypass and not self._stop_event.is_set():
+                detector = WAFDetector(self)
+                if detector.detect() and self.blocked_payloads:
+                    console.print(
+                        "[yellow]Possible WAF/AV filtering detected. Running extensive bypass attempts...[/yellow]"
+                    )
+                    if self.verbose:
+                        console.print(
+                            f"[yellow]Blocked payloads queued for bypass: {len(self.blocked_payloads)}[/yellow]"
+                        )
+                    bypass_results = detector.run_bypass()
+                    for item in bypass_results:
+                        if item and item.get("confirmed"):
+                            console.print(
+                                "[bold green]BYPASS CONFIRMED[/bold green] "
+                                f"{item['payload'][:80]}"
+                            )
+
+            self._render_summary()
+
+            if self.output_file:
+                clean_results = [
+                    {
+                        "url": item["url"],
+                        "payload": item["payload"],
+                        "dialog_type": item["dialog_type"],
+                        "dialog_text": item["dialog_text"],
+                        "timestamp": item["timestamp"],
+                    }
+                    for item in self.results
+                ]
+                save_results(self.output_file, clean_results)
+                console.print(f"[green]Saved results to {self.output_file}[/green]")
+
+            return self.results
+
+        finally:
+            signal.signal(signal.SIGINT, original_handler)
