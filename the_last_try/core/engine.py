@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import signal
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -60,6 +61,9 @@ class Engine:
         self._thread_local = threading.local()
         self._stop_event = threading.Event()
 
+        # Reuse object config; browser process is still launched per call in confirmer.
+        self._browser_confirmer = BrowserConfirmer(headless=self.headless, timeout=self.timeout)
+
     def _session(self) -> requests.Session:
         if not hasattr(self._thread_local, "session"):
             retry = Retry(
@@ -92,11 +96,13 @@ class Engine:
                 console.print(f"[red][ERROR][/red] Request failed for {url}: {exc}")
             return None
 
+    def _normalize_redirect_depth(self, response: requests.Response) -> bool:
+        """Enforce max redirect depth of 3 per project requirements."""
+        return len(response.history) <= 3
+
     def test_payload(self, payload: str, bypass_mode: bool = False) -> Optional[Dict[str, Any]]:
         if self._stop_event.is_set():
             return None
-
-        import random
 
         target = self.target_url.replace("HERE", payload)
         user_agent = random.choice(self.user_agents)
@@ -105,6 +111,11 @@ class Engine:
         response = self._make_request(target, user_agent)
 
         if response is None:
+            return None
+
+        if not self._normalize_redirect_depth(response):
+            if self.verbose:
+                console.print(f"[red]Too many redirects (>3), skipped[/red] {target[:110]}")
             return None
 
         response_entry = {
@@ -118,12 +129,12 @@ class Engine:
         with self._lock:
             self.response_log.append(response_entry)
 
-        if response.status_code in {403, 406, 429, 503}:
+        if response.status_code in {401, 403, 406, 409, 418, 429, 451, 500, 503}:
             with self._lock:
                 self.blocked_payloads.add(payload)
             if self.verbose:
                 console.print(
-                    f"[red]BLOCKED[/red] {response.status_code} | {payload[:80]}"
+                    f"[red]BLOCKED[/red] {response.status_code} | {'bypass' if bypass_mode else 'normal'} | {payload[:80]}"
                 )
             return None
 
@@ -133,8 +144,7 @@ class Engine:
             return None
 
         with self._browser_lock:
-            confirmer = BrowserConfirmer(headless=self.headless, timeout=self.timeout)
-            dialog = confirmer.confirm_xss(target)
+            dialog = self._browser_confirmer.confirm_xss(target)
 
         if dialog and dialog.get("confirmed"):
             result = {
@@ -214,11 +224,39 @@ class Engine:
                     console.print(
                         "[yellow]Possible WAF/AV filtering detected. Running extensive bypass attempts...[/yellow]"
                     )
-                    if self.verbose:
-                        console.print(
-                            f"[yellow]Blocked payloads queued for bypass: {len(self.blocked_payloads)}[/yellow]"
+
+                    def status_cb(msg: str) -> None:
+                        if self.verbose:
+                            console.print(f"[blue]{msg}[/blue]")
+
+                    estimated_attempts = detector.estimate_total_attempts()
+                    with Progress(
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TextColumn("{task.completed}/{task.total}"),
+                        TimeElapsedColumn(),
+                        console=console,
+                    ) as bypass_progress:
+                        bypass_task = bypass_progress.add_task(
+                            "Bypass attempts", total=estimated_attempts
                         )
-                    bypass_results = detector.run_bypass()
+
+                        def progress_cb() -> None:
+                            bypass_progress.advance(bypass_task)
+
+                        bypass_results, bypass_stats = detector.run_bypass(
+                            status_cb=status_cb,
+                            progress_cb=progress_cb,
+                        )
+
+                    console.print(
+                        "[cyan]Bypass stats:[/cyan] "
+                        f"blocked={bypass_stats['blocked_payloads']} | "
+                        f"variants={bypass_stats['total_variants_generated']} | "
+                        f"attempts={bypass_stats['total_attempts_run']} | "
+                        f"confirmed={bypass_stats['confirmed']}"
+                    )
+
                     for item in bypass_results:
                         if item and item.get("confirmed"):
                             console.print(

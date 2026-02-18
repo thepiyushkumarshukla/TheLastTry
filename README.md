@@ -10,6 +10,8 @@ Instead of reporting reflected payloads as vulnerable, it confirms XSS only when
 - ✅ Reflection filter to reduce expensive browser checks.
 - ✅ Browser confirmation using Playwright dialog listeners.
 - ✅ WAF/AV-style filtering detection and extensive bypass techniques.
+- ✅ Startup branding banner with signature “The Last Try” identity.
+- ✅ Live bypass progress/status + post-bypass statistics for transparency.
 - ✅ Real-time, colorized CLI output with progress tracking.
 - ✅ JSON or plain-text report export.
 
@@ -154,6 +156,10 @@ When saving to `.json`, the report is a list of confirmed findings:
 ]
 ```
 
+## Branding / Startup UI
+
+When the tool starts, it prints a styled ASCII brand banner for **The Last Try** so scans have a clear identity in terminal logs and shared screenshots.
+
 ## WAF/AV Detection and Bypass
 
 If enabled, the engine inspects responses for security-filter behavior:
@@ -185,7 +191,8 @@ The scanner uses this workflow automatically:
 - Detect probable filtering.
 - Collect blocked payloads.
 - Generate transformed variants.
-- Re-test each variant.
+- Re-test each variant with live progress updates.
+- Print bypass stats (blocked payloads, variants generated, attempts run, confirmed).
 - Report only variants that still trigger real dialogs in browser.
 
 ## Directly push this project to your GitHub repo
@@ -219,7 +226,9 @@ git push -u origin work
 
 - HTTP testing is multithreaded.
 - Browser checks are limited with a semaphore to avoid overloading the host.
-- Reflection filtering significantly reduces browser launches.
+- Reflection filtering now checks decoded + HTML-unescaped forms for better accuracy without over-launching browsers.
+- Duplicate payloads are removed while preserving order to reduce unnecessary requests and improve scan throughput safely.
+- Redirect handling is normalized to skip chains longer than 3 redirects, improving reliability and matching intended behavior.
 
 ## Error handling and stopping
 

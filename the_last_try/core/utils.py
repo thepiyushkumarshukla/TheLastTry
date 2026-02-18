@@ -5,13 +5,45 @@ from __future__ import annotations
 import json
 import random
 import time
+from html import unescape
 from pathlib import Path
 from typing import List, Sequence
 from urllib.parse import unquote
 
 from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 console = Console()
+
+
+def print_branding() -> None:
+    """Render startup branding banner for The Last Try."""
+    logo = Text(
+        """
+████████╗██╗  ██╗███████╗    ██╗      █████╗ ███████╗████████╗
+╚══██╔══╝██║  ██║██╔════╝    ██║     ██╔══██╗██╔════╝╚══██╔══╝
+   ██║   ███████║█████╗      ██║     ███████║███████╗   ██║
+   ██║   ██╔══██║██╔══╝      ██║     ██╔══██║╚════██║   ██║
+   ██║   ██║  ██║███████╗    ███████╗██║  ██║███████║   ██║
+   ╚═╝   ╚═╝  ╚═╝╚══════╝    ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝
+
+████████╗██████╗ ██╗   ██╗
+╚══██╔══╝██╔══██╗╚██╗ ██╔╝
+   ██║   ██████╔╝ ╚████╔╝
+   ██║   ██╔══██╗  ╚██╔╝
+   ██║   ██║  ██║   ██║
+   ╚═╝   ╚═╝  ╚═╝   ╚═╝
+        """.strip("\n"),
+        style="bold cyan",
+    )
+
+    subtitle = (
+        "[bold white]High-confidence XSS verification via real browser dialogs[/bold white]\n"
+        "[green]Brand:[/green] The Last Try  [yellow]Mode:[/yellow] Reflection + Browser + Smart Bypass"
+    )
+
+    console.print(Panel.fit(f"{logo}\n\n{subtitle}", border_style="bright_magenta"))
 
 
 def _load_lines(path: Path) -> List[str]:
@@ -34,7 +66,10 @@ def load_payloads(filepath: str | None = None) -> List[str]:
     payloads = _load_lines(path)
     if not payloads:
         raise ValueError(f"No payloads found in file: {path}")
-    return payloads
+
+    # Preserve order while removing duplicates to improve speed and consistency.
+    deduped = list(dict.fromkeys(payloads))
+    return deduped
 
 
 def load_user_agents(filepath: str | None = None) -> List[str]:
@@ -53,17 +88,34 @@ def human_delay(base: float, jitter: float) -> None:
     time.sleep(max(base, 0.0) + jitter_value)
 
 
-def payload_reflected(payload: str, html: str) -> bool:
-    """Check if payload or reasonably decoded variants are reflected in response."""
-    if not html:
-        return False
-
-    candidates = {
+def _reflection_candidates(payload: str) -> set[str]:
+    return {
         payload,
         unquote(payload),
         unquote(unquote(payload)),
+        unescape(payload),
+        unescape(unquote(payload)),
     }
-    return any(candidate and candidate in html for candidate in candidates)
+
+
+def payload_reflected(payload: str, html: str) -> bool:
+    """Check if payload or reasonably decoded/escaped variants are reflected."""
+    if not html:
+        return False
+
+    body_forms = {
+        html,
+        unescape(html),
+        unquote(html),
+    }
+
+    for candidate in _reflection_candidates(payload):
+        if not candidate:
+            continue
+        for body in body_forms:
+            if candidate in body:
+                return True
+    return False
 
 
 def save_results(output_file: str, results: Sequence[dict]) -> None:

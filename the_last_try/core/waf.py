@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from html import escape
 from pathlib import Path
+from typing import Callable, Optional
 from urllib.parse import quote
 
 
@@ -59,7 +60,6 @@ class WAFDetector:
         "imperva",
     ]
 
-
     def __init__(self, engine) -> None:
         self.engine = engine
 
@@ -106,7 +106,7 @@ class WAFDetector:
         ]
 
     def _fragmentation_mutation(self, payload: str) -> list[str]:
-        variants = [
+        return [
             payload.replace("<script", "<scr<script>ipt"),
             payload.replace("alert", "al" + "ert"),
             payload.replace("onerror", "oneonerrorrror"),
@@ -114,7 +114,6 @@ class WAFDetector:
             payload + "/*x*/",
             f"{payload}aaa",
         ]
-        return variants
 
     def _handler_mutation(self, payload: str) -> list[str]:
         replaced = []
@@ -161,16 +160,60 @@ class WAFDetector:
         random.shuffle(variant_list)
         return variant_list
 
-    def run_bypass(self) -> list[dict]:
-        """Re-run blocked payloads with bypass techniques and return confirmations."""
-        bypass_confirmations: list[dict] = []
-
+    def estimate_total_attempts(self) -> int:
+        """Estimate bypass attempts for progress visualization."""
+        total = 0
         for payload in list(self.engine.blocked_payloads):
+            total += len(self.generate_bypass_payloads(payload))
+        return max(total, 1)
+
+    def run_bypass(
+        self,
+        status_cb: Optional[Callable[[str], None]] = None,
+        progress_cb: Optional[Callable[[], None]] = None,
+    ) -> tuple[list[dict], dict]:
+        """Re-run blocked payloads with bypass techniques and return confirmations + stats."""
+        bypass_confirmations: list[dict] = []
+        total_attempts = 0
+        confirmed_count = 0
+        total_variants = 0
+
+        blocked_list = list(self.engine.blocked_payloads)
+        for index, payload in enumerate(blocked_list, start=1):
             candidates = self.generate_bypass_payloads(payload)
-            for candidate in candidates:
+            total_variants += len(candidates)
+            if status_cb:
+                status_cb(
+                    f"[bypass] base {index}/{len(blocked_list)} | "
+                    f"variants={len(candidates)} | payload={payload[:70]}"
+                )
+
+            for attempt, candidate in enumerate(candidates, start=1):
+                total_attempts += 1
+                if status_cb and attempt % 10 == 0:
+                    status_cb(
+                        f"[bypass] running variant {attempt}/{len(candidates)} "
+                        f"for base {index}/{len(blocked_list)}"
+                    )
+
                 result = self.engine.test_payload(candidate, bypass_mode=True)
+                if progress_cb:
+                    progress_cb()
+
                 if result and result.get("confirmed"):
+                    confirmed_count += 1
                     bypass_confirmations.append(result)
+                    if status_cb:
+                        status_cb(
+                            f"[bypass] confirmed for base {index}/{len(blocked_list)} "
+                            f"after {attempt} variant(s)"
+                        )
                     break
 
-        return bypass_confirmations
+        stats = {
+            "blocked_payloads": len(blocked_list),
+            "total_variants_generated": total_variants,
+            "total_attempts_run": total_attempts,
+            "confirmed": confirmed_count,
+        }
+        return bypass_confirmations, stats

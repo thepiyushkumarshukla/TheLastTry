@@ -8,7 +8,12 @@ import sys
 from rich.console import Console
 
 from core.engine import Engine
-from core.utils import load_payloads, load_user_agents, validate_here_marker
+from core.utils import (
+    load_payloads,
+    load_user_agents,
+    print_branding,
+    validate_here_marker,
+)
 
 console = Console()
 
@@ -63,6 +68,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+
+    print_branding()
 
     try:
         validate_here_marker(args.target_url)
