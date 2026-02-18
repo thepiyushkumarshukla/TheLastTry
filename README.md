@@ -1,4 +1,5 @@
 # The Last Try ⚔️​ [ 最後の試み ]
+![](https://raw.githubusercontent.com/thepiyushkumarshukla/TheLastTry/refs/heads/main/the_last_try/logo.png)
 
 **The Last Try** is an XSS automation tool focused on one goal: **high-confidence verification**.  
 Instead of reporting reflected payloads as vulnerable, it confirms XSS only when a real browser executes JavaScript and raises a dialog (`alert`, `confirm`, `prompt`).
