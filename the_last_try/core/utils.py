@@ -31,7 +31,7 @@ def print_branding() -> None:
    ██║   ██║  ██║███████╗    ███████╗██║  ██║███████║   ██║          ██║   ██║  ██║   ██║
    ╚═╝   ╚═╝  ╚═╝╚══════╝    ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝   ╚═╝
 
-                    最後の試み  •  Samurai XSS Verification Engine
+                    最後の試み  •  Samurai XSS Verification Engine [ By :- Piyush Shukla ]
         """.strip("\n"),
         style="bold bright_red",
     )
