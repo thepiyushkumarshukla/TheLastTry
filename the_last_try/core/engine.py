@@ -107,7 +107,10 @@ class Engine:
         target = self.target_url.replace("HERE", payload)
         user_agent = random.choice(self.user_agents)
 
-        human_delay(self.delay, self.random_delay)
+        human_delay(self.delay, self.random_delay, stop_event=self._stop_event)
+
+        if self._stop_event.is_set():
+            return None
         response = self._make_request(target, user_agent)
 
         if response is None:
@@ -143,7 +146,12 @@ class Engine:
                 console.print(f"[dim]Not reflected[/dim] {payload[:80]}")
             return None
 
+        if self._stop_event.is_set():
+            return None
+
         with self._browser_lock:
+            if self._stop_event.is_set():
+                return None
             dialog = self._browser_confirmer.confirm_xss(target)
 
         if dialog and dialog.get("confirmed"):
@@ -190,7 +198,11 @@ class Engine:
         console.print(table)
 
     def _signal_handler(self, signum, frame) -> None:  # noqa: ARG002
-        console.print("\n[yellow]Interrupt received. Finishing in-flight payloads...[/yellow]")
+        if self._stop_event.is_set():
+            console.print("\n[red]Forced stop requested. Exiting immediately...[/red]")
+            raise KeyboardInterrupt
+
+        console.print("\n[yellow]Interrupt received. Stopping workers (2-3 seconds)...[/yellow]")
         self._stop_event.set()
 
     def run(self) -> list[dict]:
@@ -213,9 +225,17 @@ class Engine:
                     }
 
                     for future in as_completed(future_map):
-                        _ = future.result()
+                        try:
+                            _ = future.result()
+                        except Exception as exc:
+                            if self.verbose:
+                                console.print(f"[red][worker-error][/red] {exc}")
                         progress.advance(task)
+
                         if self._stop_event.is_set():
+                            for pending in future_map:
+                                pending.cancel()
+                            executor.shutdown(wait=False, cancel_futures=True)
                             break
 
             if self.waf_bypass and not self._stop_event.is_set():

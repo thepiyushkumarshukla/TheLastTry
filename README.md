@@ -1,6 +1,4 @@
-# The Last Try ⚔️ [ 最後の試み ]
-
-![](https://raw.githubusercontent.com/thepiyushkumarshukla/TheLastTry/refs/heads/main/the_last_try/logo.png)
+# The Last Try
 
 **The Last Try** is an XSS automation tool focused on one goal: **high-confidence verification**.  
 Instead of reporting reflected payloads as vulnerable, it confirms XSS only when a real browser executes JavaScript and raises a dialog (`alert`, `confirm`, `prompt`).
@@ -82,7 +80,7 @@ positional arguments:
 
 optional arguments:
   -p, --payload-file    Custom payload file (one payload per line)
-  --threads             Number of concurrent threads (default: 5)
+  --threads             Number of concurrent threads (default: 5, max: 5)
   --delay               Base delay between requests in seconds (default: 1.0)
   --random-delay        Add random jitter up to this value (default: 2.0)
   --user-agents         File with user agents (one per line)
@@ -93,6 +91,12 @@ optional arguments:
   --timeout             Request/page timeout seconds (default: 10)
   --verbose             Enable detailed logs
 ```
+
+
+### Thread safety cap
+
+For stealth and stability, the tool enforces a hard maximum of **5 threads**.
+If a higher value is provided, the scan exits with a clear error message.
 
 ## Examples
 
@@ -160,7 +164,8 @@ When saving to `.json`, the report is a list of confirmed findings:
 
 ## Branding / Startup UI
 
-When the tool starts, it prints a styled ASCII brand banner for **The Last Try** so scans have a clear identity in terminal logs and shared screenshots.
+When the tool starts, it prints a styled ASCII brand banner with a Japanese/samurai-inspired feel for **The Last Try** so scans have a clear identity in terminal logs and shared screenshots.
+It also shows a startup notice to press `Ctrl+C` once or twice and wait 2-3 seconds for graceful stop.
 
 ## WAF/AV Detection and Bypass
 
@@ -235,7 +240,8 @@ git push -u origin work
 ## Error handling and stopping
 
 - Request, timeout, and Playwright errors are handled per payload and do not crash the whole run.
-- Press `Ctrl+C` to stop gracefully; in-flight work completes, and results are preserved.
+- Press `Ctrl+C` to stop gracefully; worker tasks are signaled immediately and pending futures are canceled for faster exits (typically within 2-3 seconds depending on in-flight browser/request operations).
+- Pressing `Ctrl+C` again triggers a forced stop path if needed.
 
 ## Limitations
 

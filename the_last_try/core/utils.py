@@ -7,6 +7,7 @@ import random
 import time
 from html import unescape
 from pathlib import Path
+from threading import Event
 from typing import List, Sequence
 from urllib.parse import unquote
 
@@ -21,26 +22,24 @@ def print_branding() -> None:
     """Render startup branding banner for The Last Try."""
     logo = Text(
         """
-████████╗██╗  ██╗███████╗    ██╗      █████╗ ███████╗████████╗
-╚══██╔══╝██║  ██║██╔════╝    ██║     ██╔══██╗██╔════╝╚══██╔══╝
-   ██║   ███████║█████╗      ██║     ███████║███████╗   ██║
-   ██║   ██╔══██║██╔══╝      ██║     ██╔══██║╚════██║   ██║
-   ██║   ██║  ██║███████╗    ███████╗██║  ██║███████║   ██║
-   ╚═╝   ╚═╝  ╚═╝╚══════╝    ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝
+⛩️  炎と影の中で、最後の一撃を。
 
-████████╗██████╗ ██╗   ██╗
-╚══██╔══╝██╔══██╗╚██╗ ██╔╝
-   ██║   ██████╔╝ ╚████╔╝
-   ██║   ██╔══██╗  ╚██╔╝
-   ██║   ██║  ██║   ██║
-   ╚═╝   ╚═╝  ╚═╝   ╚═╝
+████████╗██╗  ██╗███████╗    ██╗      █████╗ ███████╗████████╗    ████████╗██████╗ ██╗   ██╗
+╚══██╔══╝██║  ██║██╔════╝    ██║     ██╔══██╗██╔════╝╚══██╔══╝    ╚══██╔══╝██╔══██╗╚██╗ ██╔╝
+   ██║   ███████║█████╗      ██║     ███████║███████╗   ██║          ██║   ██████╔╝ ╚████╔╝
+   ██║   ██╔══██║██╔══╝      ██║     ██╔══██║╚════██║   ██║          ██║   ██╔══██╗  ╚██╔╝
+   ██║   ██║  ██║███████╗    ███████╗██║  ██║███████║   ██║          ██║   ██║  ██║   ██║
+   ╚═╝   ╚═╝  ╚═╝╚══════╝    ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝   ╚═╝
+
+                    最後の試み  •  Samurai XSS Verification Engine
         """.strip("\n"),
-        style="bold cyan",
+        style="bold bright_red",
     )
 
     subtitle = (
-        "[bold white]High-confidence XSS verification via real browser dialogs[/bold white]\n"
-        "[green]Brand:[/green] The Last Try  [yellow]Mode:[/yellow] Reflection + Browser + Smart Bypass"
+        "[bold white]Automated XSS Hunting Tool[/bold white]\n"
+        "[green]Mode:[/green] Reflection + Browser + Smart Bypass\n"
+        "[yellow]Notice:[/yellow] Press Ctrl+C once or twice and wait 2-3 seconds for graceful shutdown."
     )
 
     console.print(Panel.fit(f"{logo}\n\n{subtitle}", border_style="bright_magenta"))
@@ -67,7 +66,6 @@ def load_payloads(filepath: str | None = None) -> List[str]:
     if not payloads:
         raise ValueError(f"No payloads found in file: {path}")
 
-    # Preserve order while removing duplicates to improve speed and consistency.
     deduped = list(dict.fromkeys(payloads))
     return deduped
 
@@ -82,10 +80,17 @@ def load_user_agents(filepath: str | None = None) -> List[str]:
     return user_agents
 
 
-def human_delay(base: float, jitter: float) -> None:
-    """Sleep with base delay and random jitter."""
-    jitter_value = random.uniform(0.0, max(jitter, 0.0))
-    time.sleep(max(base, 0.0) + jitter_value)
+def human_delay(base: float, jitter: float, stop_event: Event | None = None) -> None:
+    """Sleep with base delay and random jitter; interrupt quickly if stop requested."""
+    total_sleep = max(base, 0.0) + random.uniform(0.0, max(jitter, 0.0))
+    slept = 0.0
+    step = 0.1
+    while slept < total_sleep:
+        if stop_event and stop_event.is_set():
+            return
+        chunk = min(step, total_sleep - slept)
+        time.sleep(chunk)
+        slept += chunk
 
 
 def _reflection_candidates(payload: str) -> set[str]:

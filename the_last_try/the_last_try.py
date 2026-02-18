@@ -83,6 +83,10 @@ def main() -> int:
         console.print("[red]--threads must be >= 1[/red]")
         return 1
 
+    if args.threads > 5:
+        console.print("[red]Maximum threads allowed is 5. Please use --threads up to 5 only.[/red]")
+        return 1
+
     if args.timeout < 1:
         console.print("[red]--timeout must be >= 1[/red]")
         return 1
